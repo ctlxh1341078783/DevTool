@@ -138,11 +138,11 @@ class UninstallerWindow:
             bat_content = f'''@echo off
 chcp 65001 >nul
 echo 正在卸载 {APP_NAME}...
-ping -n 3 127.0.0.1 >nul
+ping -n 4 127.0.0.1 >nul
 rd /s /q "{install_dir}"
 del "%~f0"
 '''
-            bat_path.write_text(bat_content, encoding="ascii", errors="replace")
+            bat_path.write_text(bat_content, encoding="utf-8")
 
             try:
                 subprocess.Popen(
