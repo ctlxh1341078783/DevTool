@@ -184,6 +184,9 @@ rm -f "$0"
         self.root.destroy()
         sys.exit(0)
 
+    def run(self):
+        self.root.mainloop()
+
 
 if __name__ == "__main__":
     main()
