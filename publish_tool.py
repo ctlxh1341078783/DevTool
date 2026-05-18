@@ -60,6 +60,7 @@ class PublishTool:
         self._version_info = {}
         self._version_file = None
         self._building = False
+        self.icon_var = tk.StringVar()
 
         self._set_app_icon()
         self._load_own_version()
@@ -127,10 +128,24 @@ class PublishTool:
         self._recent_frame.grid(row=1, column=1, sticky=tk.EW, pady=(0, 8))
         self._refresh_recent_links()
 
+        # ── 图标文件 ──
+        tk.Label(body, text="图标文件:", bg=BG, fg=FG, font=FONT).grid(
+            row=2, column=0, sticky=tk.W, pady=4)
+        icon_frame = tk.Frame(body, bg=BG)
+        icon_frame.grid(row=2, column=1, sticky=tk.EW, pady=4, padx=(8, 0))
+        self.icon_entry = ttk.Entry(icon_frame, textvariable=self.icon_var, font=FONT)
+        self.icon_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(icon_frame, text="浏览...", command=self._browse_icon,
+                   width=8).pack(side=tk.LEFT, padx=(4, 0))
+        self.gen_icon_btn = tk.Button(icon_frame, text="生成图标", command=self._generate_icon,
+                                       bg=SUCC, fg="white", font=FONT,
+                                       relief=tk.FLAT, cursor="hand2", padx=10, pady=2)
+        self.gen_icon_btn.pack(side=tk.LEFT, padx=(4, 0))
+
         # ── 版本信息 ──
         info_frame = tk.LabelFrame(body, text="版本信息", bg=BG, fg=FG,
                                     font=FONT_BOLD, padx=12, pady=8)
-        info_frame.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=(8, 8))
+        info_frame.grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=(8, 8))
 
         self.current_ver_var = tk.StringVar(value="请先选择项目目录")
         tk.Label(info_frame, textvariable=self.current_ver_var, bg=BG, fg=FG,
@@ -148,16 +163,16 @@ class PublishTool:
 
         # ── 更新内容 ──
         tk.Label(body, text="更新内容（一行一条，无需前缀符号）:", bg=BG, fg=FG,
-                 font=FONT).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(8, 2))
+                 font=FONT).grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(8, 2))
         self.changelog_text = tk.Text(body, height=6, width=50, font=FONT,
                                        relief=tk.SOLID, borderwidth=1,
                                        fg=FG, bg=SURF, padx=8, pady=6)
-        self.changelog_text.grid(row=4, column=0, columnspan=2, sticky=tk.EW,
+        self.changelog_text.grid(row=5, column=0, columnspan=2, sticky=tk.EW,
                                   pady=(0, 8))
 
         # ── 选项 ──
         opt_frame = tk.Frame(body, bg=BG)
-        opt_frame.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
+        opt_frame.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
         self.auto_push_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt_frame, text="自动 git commit & push", variable=self.auto_push_var,
                        bg=BG, font=FONT, activebackground=BG,
@@ -165,7 +180,7 @@ class PublishTool:
 
         # ── 按钮 ──
         btn_row = tk.Frame(body, bg=BG)
-        btn_row.grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=(0, 8))
+        btn_row.grid(row=7, column=0, columnspan=2, sticky=tk.EW, pady=(0, 8))
 
         self.publish_btn = tk.Button(btn_row, text="一键发布", command=self._publish,
                                       bg=ACC, fg="white", font=FONT_BOLD,
@@ -189,10 +204,10 @@ class PublishTool:
 
         # ── 输出日志 ──
         tk.Label(body, text="输出日志:", bg=BG, fg=FG, font=FONT).grid(
-            row=7, column=0, columnspan=2, sticky=tk.W, pady=(4, 2))
+            row=8, column=0, columnspan=2, sticky=tk.W, pady=(4, 2))
         log_frame = tk.Frame(body, bg="#1e1e1e")
-        log_frame.grid(row=8, column=0, columnspan=2, sticky=tk.NSEW)
-        body.rowconfigure(8, weight=1)
+        log_frame.grid(row=9, column=0, columnspan=2, sticky=tk.NSEW)
+        body.rowconfigure(9, weight=1)
         body.columnconfigure(1, weight=1)
 
         self.log_text = tk.Text(log_frame, height=10, font=MONO,
@@ -240,6 +255,13 @@ class PublishTool:
         self._add_recent_dir(d)
         self._log(f"已加载项目: {p.name}", "ok")
 
+        # 自动检测项目中已有的图标源文件
+        icon_src = p / "assets" / "icon_source.png"
+        if icon_src.exists():
+            self.icon_var.set(str(icon_src))
+        else:
+            self.icon_var.set("")
+
     def _refresh_version(self):
         if not self._version_file:
             return
@@ -282,6 +304,78 @@ class PublishTool:
     def _select_recent(self, d: str):
         self.dir_var.set(d)
         self._on_dir_changed()
+
+    # ── 图标选择 ──────────────────────────────────────
+
+    def _browse_icon(self):
+        """打开文件选择器选择 PNG/JPG 图标"""
+        path = filedialog.askopenfilename(
+            title="选择图标文件",
+            filetypes=[("图片文件", "*.png *.jpg *.jpeg"), ("PNG", "*.png"), ("JPEG", "*.jpg *.jpeg")])
+        if path:
+            self.icon_var.set(path)
+
+    def _generate_icon(self):
+        """将选中的图标复制到项目 assets/ 并转换为 ICO"""
+        if not self._project_dir:
+            messagebox.showwarning("提示", "请先选择项目目录")
+            return
+
+        src = self.icon_var.get().strip()
+        if not src:
+            messagebox.showwarning("提示", "请先选择图标文件")
+            return
+
+        src_path = Path(src)
+        if not src_path.exists():
+            messagebox.showwarning("提示", f"图标文件不存在:\n{src}")
+            return
+
+        if src_path.suffix.lower() not in (".png", ".jpg", ".jpeg"):
+            messagebox.showwarning("提示", "请选择 PNG 或 JPG 格式的图片")
+            return
+
+        # 复制到项目 assets/icon_source.png
+        assets_dir = self._project_dir / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        dst = assets_dir / "icon_source.png"
+
+        try:
+            if src_path.suffix.lower() in (".jpg", ".jpeg"):
+                from PIL import Image
+                img = Image.open(src_path)
+                img.save(str(dst), "PNG")
+            else:
+                shutil.copy2(str(src_path), str(dst))
+            self._log(f"图标已复制到 {dst}", "ok")
+        except Exception as e:
+            self._log(f"复制图标失败: {e}", "err")
+            messagebox.showerror("错误", f"图标复制失败:\n{e}")
+            return
+
+        # 运行 convert_icon.py
+        convert_script = self._project_dir / "tools" / "convert_icon.py"
+        if not convert_script.exists():
+            self._log("未找到 tools/convert_icon.py，跳过 ICO 转换", "warn")
+            self._log("构建时 build_all.bat 会自动处理图标转换", "info")
+            return
+
+        self._log("正在转换图标...")
+        try:
+            r = subprocess.run(
+                [sys.executable, str(convert_script)],
+                cwd=str(self._project_dir),
+                capture_output=True, text=True, timeout=30)
+            for line in r.stdout.strip().split("\n"):
+                if line.strip():
+                    self._log(line.strip())
+            if r.returncode != 0:
+                err = r.stderr.strip() or "未知错误"
+                self._log(f"图标转换失败: {err}", "err")
+            else:
+                self._log("图标生成完成 ✓", "ok")
+        except Exception as e:
+            self._log(f"图标转换异常: {e}", "err")
 
     # ── 日志 ─────────────────────────────────────────
 
@@ -346,7 +440,8 @@ class PublishTool:
                  "  version.json, build_gui.spec, installer.py,\n"
                  "  uninstaller.py, build_installer.spec,\n"
                  "  build_uninstaller.spec, build_all.bat,\n"
-                 "  build_all.sh, .gitignore",
+                 "  build_all.sh, .gitignore,\n"
+                 "  tools/convert_icon.py",
                  bg=SURF, fg=FG_M, font=FONT, justify=tk.LEFT).pack(anchor=tk.W, pady=(8, 4))
 
         # 日志
@@ -404,6 +499,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(PROJECT_ROOT / "version.json"), "."),
+        (str(PROJECT_ROOT / "assets" / "app_icon.ico"), "assets"),
     ],
     hiddenimports=[],
     hookspath=[],
@@ -669,22 +765,26 @@ echo ========================================
 echo   {name} — 一键构建
 echo ========================================
 echo.
-echo [1/5] 构建主程序...
+echo [1/6] 生成图标...
+python tools/convert_icon.py
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo.
+echo [2/6] 构建主程序...
 pyinstaller build_gui.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [2/5] 构建卸载程序...
+echo [3/6] 构建卸载程序...
 pyinstaller build_uninstaller.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [3/5] 复制卸载程序到 dist...
+echo [4/6] 复制卸载程序到 dist...
 copy /Y "dist\\{name}卸载程序.exe" "dist\\{name}\\" >nul 2>nul
 echo.
-echo [4/5] 构建安装程序...
+echo [5/6] 构建安装程序...
 pyinstaller build_installer.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [5/5] 同步产物到分发包目录...
+echo [6/6] 同步产物到分发包目录...
 if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%"
 xcopy "dist\\*" "%RELEASE_DIR%\\" /E /Y /Q >nul
 echo   已同步到 %RELEASE_DIR%
@@ -705,15 +805,17 @@ pause
 set -e
 RELEASE_DIR="../{name}_release"
 echo "构建 {name}..."
-echo "[1/5] 构建主程序..."
+echo "[1/6] 生成图标..."
+python tools/convert_icon.py
+echo "[2/6] 构建主程序..."
 pyinstaller build_gui.spec --noconfirm
-echo "[2/5] 构建卸载程序..."
+echo "[3/6] 构建卸载程序..."
 pyinstaller build_uninstaller.spec --noconfirm
-echo "[3/5] 复制卸载程序..."
+echo "[4/6] 复制卸载程序..."
 cp "dist/{name}卸载程序" "dist/{name}/" 2>/dev/null || true
-echo "[4/5] 构建安装程序..."
+echo "[5/6] 构建安装程序..."
 pyinstaller build_installer.spec --noconfirm
-echo "[5/5] 同步产物到分发包目录..."
+echo "[6/6] 同步产物到分发包目录..."
 mkdir -p "$RELEASE_DIR"
 cp -a dist/* "$RELEASE_DIR/"
 echo "  已同步到 $RELEASE_DIR"
@@ -770,7 +872,62 @@ exe = EXE(pyz, a.scripts, a.binaries, a.datas, [],
             (d / "build_uninstaller.spec").write_text(unst_spec, encoding="utf-8")
             append("  ✓ build_uninstaller.spec\n")
 
-            # 6. .gitignore
+            # 6. tools/convert_icon.py
+            append("创建 tools/convert_icon.py...\n")
+            (d / "tools").mkdir(parents=True, exist_ok=True)
+            convert_icon_code = '''"""开发工具：将 PNG 图标转为 ICO 多尺寸格式（仅在 PNG 更新时需要运行）"""
+from PIL import Image
+from pathlib import Path
+import sys
+
+def main():
+    project_root = Path(__file__).parent.parent
+    assets_dir = project_root / "assets"
+
+    # 支持命令行指定源文件
+    if len(sys.argv) > 1:
+        png_path = Path(sys.argv[1])
+    else:
+        png_path = assets_dir / "icon_source.png"
+
+    ico_path = assets_dir / "app_icon.ico"
+
+    if ico_path.exists() and not png_path.exists():
+        print(f"ICO 已存在，跳过转换 ({ico_path})")
+        return
+
+    if not png_path.exists():
+        print(f"请将图标 PNG 放到 {png_path}")
+        print(f"或直接使用现有的 {ico_path}")
+        return
+
+    print(f"读取: {png_path}")
+    img = Image.open(png_path)
+    print(f"  原始大小: {img.size}")
+
+    sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    icons = []
+    for s in sizes:
+        icons.append(img.resize(s, Image.LANCZOS))
+        print(f"  生成 {s[0]}x{s[1]}")
+
+    icons[0].save(ico_path, format="ICO",
+                  sizes=[(i.width, i.height) for i in icons],
+                  append_images=icons[1:])
+    size_kb = ico_path.stat().st_size / 1024
+    print(f"已保存: {ico_path} ({size_kb:.0f} KB)")
+
+if __name__ == "__main__":
+    main()
+'''
+            (d / "tools" / "convert_icon.py").write_text(convert_icon_code, encoding="utf-8")
+            append("  ✓ tools/convert_icon.py\n")
+
+            # 7. assets/ 目录
+            (d / "assets").mkdir(parents=True, exist_ok=True)
+            append("  ✓ assets/ (图标目录)\n")
+
+            # 8. .gitignore
             append("创建 .gitignore...\n")
             (d / ".gitignore").write_text("build/\ndist/\n__pycache__/\n*.pyc\n.env\n*.log\n")
             append("  ✓ .gitignore\n")
