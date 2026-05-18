@@ -663,7 +663,6 @@ if __name__ == "__main__": main()
             # 5. build_all.bat (Windows 完整构建)
             append("创建 build_all.bat...\n")
             bat = f'''@echo off
-chcp 65001 >nul
 set "RELEASE_DIR=..\\{name}_release"
 
 echo ========================================
@@ -697,7 +696,7 @@ echo   分发包   %RELEASE_DIR%\\
 echo ========================================
 pause
 '''
-            (d / "build_all.bat").write_text(bat, encoding="utf-8")
+            (d / "build_all.bat").write_text(bat, encoding="gbk")
             append("  ✓ build_all.bat\n")
 
             # 5b. build_all.sh (macOS)
