@@ -89,10 +89,16 @@ class UninstallerWindow:
             self.root.update()
             self._remove_registry()
 
-        # 3. 自毁
-        self.status_var.set("正在清理文件并卸载...")
+        # 3. 删除安装目录文件
+        self.status_var.set("正在清理文件...")
         self.root.update()
-        self._self_destruct()
+        self._delete_files()
+
+        # 4. 显示结果
+        self.root.config(cursor="")
+        messagebox.showinfo("卸载完成", "程序已卸载。\n部分文件将在系统重启后彻底清除。")
+        self.root.destroy()
+        sys.exit(0)
 
     def _remove_shortcuts(self):
         if IS_WIN:
@@ -129,21 +135,36 @@ class UninstallerWindow:
             except OSError:
                 pass
 
-    def _self_destruct(self):
+    def _delete_files(self):
+        """删除安装目录中的文件，无法删除的（自身EXE）标记为重启后清除"""
         install_dir = str(self._install_dir)
+        frozen = getattr(sys, 'frozen', False)
+        my_exe = os.path.normpath(sys.executable) if frozen else os.path.normpath(__file__)
 
         if IS_WIN:
-            # PowerShell 原生支持 Unicode 路径，不会有编码问题
-            ps_cmd = (
-                f'Start-Sleep -Seconds 3; '
-                f'Remove-Item -Path "{install_dir}" -Recurse -Force -ErrorAction SilentlyContinue'
-            )
+            for root, dirs, files in os.walk(install_dir, topdown=False):
+                for name in files:
+                    fp = os.path.normpath(os.path.join(root, name))
+                    if fp == my_exe:
+                        continue
+                    try:
+                        os.chmod(fp, 0o777)
+                        os.remove(fp)
+                    except Exception:
+                        pass
+                for name in dirs:
+                    dp = os.path.join(root, name)
+                    try:
+                        os.rmdir(dp)
+                    except Exception:
+                        pass
+
+            # 将自身EXE和根目录标记为重启后删除
             try:
-                subprocess.Popen(
-                    ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
-                    close_fds=True,
-                )
+                import ctypes
+                windll = ctypes.windll.kernel32
+                windll.MoveFileExW(install_dir, None, 0x4)
+                windll.MoveFileExW(my_exe, None, 0x4)
             except Exception:
                 pass
         else:
@@ -161,9 +182,6 @@ rm -f "$0"
                                close_fds=True)
             except Exception:
                 pass
-
-        self.root.destroy()
-        sys.exit(0)
 
     def run(self):
         self.root.mainloop()

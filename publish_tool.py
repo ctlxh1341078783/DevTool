@@ -567,65 +567,95 @@ from tkinter import ttk, messagebox
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
+APP_NAME = "{name}"
 
-class Uninstaller:
+class UninstallerWindow:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("{name} — 卸载")
+        self.root.title(f"{{APP_NAME}} — 卸载")
         self.root.geometry("500x360")
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
+        self.root.minsize(460, 300)
         self._dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
-        tk.Label(self.root, text="⚠ 卸载 {name}", font=("Microsoft YaHei", 14, "bold"),
-                 fg="white", bg="#e74c3c").pack(fill=tk.X, pady=10)
-        body = tk.Frame(self.root, padx=20, pady=15); body.pack(fill=tk.BOTH, expand=True)
-        tk.Label(body, text="以下操作不可撤销：", fg="#e74c3c", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
-        tk.Label(body, text=f"  删除安装目录: {{self._dir}}", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
-        tk.Label(body, text="  删除桌面快捷方式", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
-        if IS_WIN: tk.Label(body, text="  删除开始菜单", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
-        self.confirm_var = tk.BooleanVar()
-        tk.Checkbutton(body, text="我确认要彻底卸载", variable=self.confirm_var,
-                       font=("Microsoft YaHei", 10, "bold")).pack(pady=(15, 5))
-        bf = tk.Frame(body); bf.pack(fill=tk.X, pady=(15, 0))
-        tk.Button(bf, text="确认卸载", command=self._uninstall, bg="#e74c3c", fg="white",
-                  font=("Microsoft YaHei", 11, "bold"), relief=tk.FLAT, padx=25, pady=6).pack(side=tk.LEFT)
-        tk.Button(bf, text="取消", command=self.root.destroy, font=("Microsoft YaHei", 10), padx=15).pack(side=tk.RIGHT)
+        self._build_ui()
 
-    def _uninstall(self):
-        if not self.confirm_var.get(): return messagebox.showwarning("提示", "请先勾选确认框")
+    def _build_ui(self):
+        hdr = tk.Frame(self.root, bg="#e74c3c", height=50)
+        hdr.pack(fill=tk.X); hdr.pack_propagate(False)
+        tk.Label(hdr, text=f"⚠ 卸载 {{APP_NAME}}", font=("Microsoft YaHei", 14, "bold"),
+                 fg="white", bg="#e74c3c").pack(pady=10)
+        body = tk.Frame(self.root, padx=20, pady=15)
+        body.pack(fill=tk.BOTH, expand=True)
+        for w, c in [("以下操作将不可撤销：", "#e74c3c"),
+                      (f"  删除安装目录: {{self._dir}}", "#333"),
+                      ("  删除桌面快捷方式", "#333")] + \
+                      ([("  删除开始菜单文件夹", "#333"), ("  清除注册表记录", "#333")] if IS_WIN else []):
+            tk.Label(body, text=w, font=("Microsoft YaHei", 10), fg=c, anchor=tk.W, wraplength=440).pack(anchor=tk.W)
+        self.confirm_var = tk.BooleanVar()
+        tk.Checkbutton(body, text="我确认要彻底卸载此程序", variable=self.confirm_var,
+                       font=("Microsoft YaHei", 10, "bold")).pack(pady=(15, 5))
+        self.status_var = tk.StringVar(value="")
+        tk.Label(body, textvariable=self.status_var, font=("Microsoft YaHei", 10), fg="#888", wraplength=440).pack()
+        bf = tk.Frame(body); bf.pack(fill=tk.X, pady=(15, 0))
+        tk.Button(bf, text="确认卸载", command=self._do_uninstall, bg="#e74c3c", fg="white",
+                  font=("Microsoft YaHei", 11, "bold"), relief=tk.FLAT, padx=25, pady=8).pack(side=tk.LEFT)
+        tk.Button(bf, text="取消", command=self.root.destroy, font=("Microsoft YaHei", 10), padx=15, pady=6).pack(side=tk.RIGHT)
+
+    def _do_uninstall(self):
+        if not self.confirm_var.get():
+            messagebox.showwarning("提示", "请先勾选确认框")
+            return
+        self.root.config(cursor="watch"); self.root.update()
+        self.status_var.set("正在删除桌面快捷方式..."); self.root.update()
         d = str(self._dir)
-        # 桌面快捷方式
         try:
             if IS_WIN:
-                for n in ["{name}.lnk", "{name}"]:
+                for n in [f"{{APP_NAME}}.lnk", APP_NAME]:
                     p = Path(os.environ.get("USERPROFILE", "")) / "Desktop" / n
                     if p.exists(): os.remove(p)
-                sd = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "{name}"
+                sd = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / APP_NAME
                 if sd.exists(): shutil.rmtree(sd)
             elif IS_MAC:
-                sc = Path.home() / "Desktop" / "{name}.command"
+                sc = Path.home() / "Desktop" / f"{{APP_NAME}}.command"
                 if sc.exists(): os.remove(sc)
-        except: pass
-        # 注册表
+        except Exception: pass
         if IS_WIN:
+            self.status_var.set("正在清除注册表..."); self.root.update()
             import winreg
             for h in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
-                try: winreg.DeleteKey(h, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{name}")
+                try: winreg.DeleteKey(h, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{APP_NAME}}")
                 except OSError: pass
-        # 自毁
+        self.status_var.set("正在清理文件..."); self.root.update()
+        frozen = getattr(sys, 'frozen', False)
+        my_exe = os.path.normpath(sys.executable) if frozen else os.path.normpath(__file__)
         if IS_WIN:
-            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                "Start-Sleep -Seconds 3; Remove-Item -Path '" + d + "' -Recurse -Force -ErrorAction SilentlyContinue"],
-                creationflags=subprocess.CREATE_NEW_CONSOLE|subprocess.DETACHED_PROCESS, close_fds=True)
+            for root, dirs, files in os.walk(d, topdown=False):
+                for fn in files:
+                    fp = os.path.normpath(os.path.join(root, fn))
+                    if fp == my_exe: continue
+                    try: os.chmod(fp, 0o777); os.remove(fp)
+                    except Exception: pass
+                for dn in dirs:
+                    try: os.rmdir(os.path.join(root, dn))
+                    except Exception: pass
+            try:
+                import ctypes
+                wl = ctypes.windll.kernel32
+                wl.MoveFileExW(d, None, 0x4)
+                wl.MoveFileExW(my_exe, None, 0x4)
+            except Exception: pass
         else:
             sh = f'#!/bin/bash\\nsleep 2\\nrm -rf "{{d}}"\\nrm -f "$0"'
             tmp = Path(tempfile.gettempdir()) / "_uninst.sh"
             tmp.write_text(sh); os.chmod(tmp, 0o755)
             subprocess.Popen(["bash", str(tmp)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.root.config(cursor="")
+        messagebox.showinfo("卸载完成", "程序已卸载。\\n部分文件将在系统重启后彻底清除。")
         self.root.destroy(); sys.exit(0)
 
     def run(self): self.root.mainloop()
 
-if __name__ == "__main__": Uninstaller().run()
+if __name__ == "__main__": UninstallerWindow().run()
 '''
             (d / "uninstaller.py").write_text(uninst_code, encoding="utf-8")
             append("  ✓ uninstaller.py\n")
