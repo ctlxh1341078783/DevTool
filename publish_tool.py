@@ -613,10 +613,10 @@ class Uninstaller:
                 except OSError: pass
         # 自毁
         if IS_WIN:
-            bat = f'@echo off\\ntimeout /t 2 >nul\\nrd /s /q "{{d}}"\\ndel "%~f0"'
+            bat = '@echo off\\nchcp 65001 >nul\\necho 正在卸载...\\nping -n 4 127.0.0.1 >nul\\nrd /s /q \"' + d + '\"\\ndel \"%~f0\"'
             tmp = Path(tempfile.gettempdir()) / "_uninst.bat"
-            tmp.write_text(bat, encoding="ascii")
-            subprocess.Popen(["cmd", "/c", str(tmp)], creationflags=0x00000008|subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+            tmp.write_text(bat, encoding="utf-8")
+            subprocess.Popen(["cmd", "/c", str(tmp)], creationflags=subprocess.CREATE_NEW_CONSOLE|subprocess.DETACHED_PROCESS, close_fds=True, cwd=str(Path(tempfile.gettempdir())))
         else:
             sh = f'#!/bin/bash\\nsleep 2\\nrm -rf "{{d}}"\\nrm -f "$0"'
             tmp = Path(tempfile.gettempdir()) / "_uninst.sh"
@@ -648,7 +648,7 @@ pyinstaller build_uninstaller.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo [3/4] 复制卸载程序到 dist...
-copy /Y "dist\\{name}\\卸载程序\\{name}卸载程序.exe" "dist\\{name}\\" 2>nul
+copy /Y "dist\\{name}卸载程序.exe" "dist\\{name}\\" 2>nul
 echo.
 echo [4/4] 构建安装程序...
 pyinstaller build_installer.spec --noconfirm
@@ -674,7 +674,7 @@ pyinstaller build_gui.spec --noconfirm
 echo "[2/4] 构建卸载程序..."
 pyinstaller build_uninstaller.spec --noconfirm
 echo "[3/4] 复制卸载程序..."
-cp "dist/{name}\\卸载程序/{name}卸载程序" "dist/{name}/" 2>/dev/null || true
+cp "dist/{name}卸载程序" "dist/{name}/" 2>/dev/null || true
 echo "[4/4] 构建安装程序..."
 pyinstaller build_installer.spec --noconfirm
 echo "构建完成！"
@@ -1044,9 +1044,9 @@ exe = EXE(pyz, a.scripts, a.binaries, a.datas, [],
 
         # 复制卸载程序到主程序目录
         if IS_WIN:
-            cmds.append('copy /Y "dist/闲鱼工具卸载程序/闲鱼工具卸载程序.exe" "dist/闲鱼数据采集分析工具/"')
+            cmds.append('copy /Y "dist/闲鱼工具卸载程序.exe" "dist/闲鱼数据采集分析工具/"')
         else:
-            cmds.append('cp "dist/闲鱼工具卸载程序/闲鱼工具卸载程序" "dist/闲鱼数据采集分析工具/"')
+            cmds.append('cp "dist/闲鱼工具卸载程序" "dist/闲鱼数据采集分析工具/"')
 
         return cmds
 
