@@ -560,7 +560,7 @@ if __name__ == "__main__":
             # 4. uninstaller.py
             append("创建 uninstaller.py...\n")
             uninst_code = f'''""" {name} — 卸载程序 """
-import sys, os, shutil, subprocess, tempfile
+import sys, os, shutil, subprocess, tempfile, time
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -568,6 +568,17 @@ from tkinter import ttk, messagebox
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
 APP_NAME = "{name}"
+
+def run_cleanup(install_dir: str):
+    time.sleep(2)
+    try: shutil.rmtree(install_dir, ignore_errors=True)
+    except Exception: pass
+
+def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--cleanup":
+        run_cleanup(sys.argv[2])
+        sys.exit(0)
+    UninstallerWindow().run()
 
 class UninstallerWindow:
     def __init__(self):
@@ -588,7 +599,7 @@ class UninstallerWindow:
         body.pack(fill=tk.BOTH, expand=True)
         for w, c in [("以下操作将不可撤销：", "#e74c3c"),
                       (f"  删除安装目录: {{self._dir}}", "#333"),
-                      ("  删除桌面快捷方式", "#333")] + \
+                      ("  删除桌面快捷方式", "#333")] + \\
                       ([("  删除开始菜单文件夹", "#333"), ("  清除注册表记录", "#333")] if IS_WIN else []):
             tk.Label(body, text=w, font=("Microsoft YaHei", 10), fg=c, anchor=tk.W, wraplength=440).pack(anchor=tk.W)
         self.confirm_var = tk.BooleanVar()
@@ -623,39 +634,28 @@ class UninstallerWindow:
             self.status_var.set("正在清除注册表..."); self.root.update()
             import winreg
             for h in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
-                try: winreg.DeleteKey(h, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{APP_NAME}}")
+                try: winreg.DeleteKey(h, r"SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\{{APP_NAME}}")
                 except OSError: pass
-        self.status_var.set("正在清理文件..."); self.root.update()
+        self.status_var.set("正在卸载..."); self.root.update()
         frozen = getattr(sys, 'frozen', False)
-        my_exe = os.path.normpath(sys.executable) if frozen else os.path.normpath(__file__)
+        my_exe = str(sys.executable) if frozen else __file__
         if IS_WIN:
-            for root, dirs, files in os.walk(d, topdown=False):
-                for fn in files:
-                    fp = os.path.normpath(os.path.join(root, fn))
-                    if fp == my_exe: continue
-                    try: os.chmod(fp, 0o777); os.remove(fp)
-                    except Exception: pass
-                for dn in dirs:
-                    try: os.rmdir(os.path.join(root, dn))
-                    except Exception: pass
+            tmp_exe = Path(tempfile.gettempdir()) / "_uninst_cleanup.exe"
             try:
-                import ctypes
-                wl = ctypes.windll.kernel32
-                wl.MoveFileExW(d, None, 0x4)
-                wl.MoveFileExW(my_exe, None, 0x4)
+                shutil.copy2(my_exe, str(tmp_exe))
+                subprocess.Popen([str(tmp_exe), "--cleanup", d],
+                    creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
             except Exception: pass
         else:
-            sh = f'#!/bin/bash\\nsleep 2\\nrm -rf "{{d}}"\\nrm -f "$0"'
+            sh = f'#!/bin/bash\\\\nsleep 2\\\\nrm -rf "{{d}}"\\\\nrm -f "$0"'
             tmp = Path(tempfile.gettempdir()) / "_uninst.sh"
             tmp.write_text(sh); os.chmod(tmp, 0o755)
             subprocess.Popen(["bash", str(tmp)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.root.config(cursor="")
-        messagebox.showinfo("卸载完成", "程序已卸载。\\n部分文件将在系统重启后彻底清除。")
         self.root.destroy(); sys.exit(0)
 
     def run(self): self.root.mainloop()
 
-if __name__ == "__main__": UninstallerWindow().run()
+if __name__ == "__main__": main()
 '''
             (d / "uninstaller.py").write_text(uninst_code, encoding="utf-8")
             append("  ✓ uninstaller.py\n")
