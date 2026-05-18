@@ -2,25 +2,27 @@
 # 一键发布工具 — macOS 一键构建（含 .dmg 生成）
 set -e
 
+RELEASE_DIR="../DevTool_release"
+
 echo "========================================"
 echo "  一键发布工具 — macOS 构建"
 echo "========================================"
 echo ""
 
-echo "[1/5] 生成图标..."
+echo "[1/6] 生成图标..."
 python3 tools/convert_icon.py
 
 echo ""
-echo "[2/5] 构建主程序..."
+echo "[2/6] 构建主程序..."
 pyinstaller build_gui.spec --noconfirm
 
 echo ""
-echo "[3/5] 构建卸载程序..."
+echo "[3/6] 构建卸载程序..."
 pyinstaller build_uninstaller.spec --noconfirm
 
 echo ""
-echo "[4/5] 复制卸载程序到主应用目录..."
-UNINST_SRC="dist/一键发布工具卸载程序/一键发布工具卸载程序"
+echo "[4/6] 复制卸载程序到主应用目录..."
+UNINST_SRC="dist/一键发布工具卸载程序"
 UNINST_DST="dist/一键发布工具/"
 if [ -f "$UNINST_SRC" ]; then
     cp "$UNINST_SRC" "$UNINST_DST"
@@ -30,15 +32,20 @@ else
 fi
 
 echo ""
-echo "[5/5] 构建安装程序..."
+echo "[5/6] 构建安装程序..."
 pyinstaller build_installer.spec --noconfirm
+
+echo ""
+echo "[6/6] 同步产物到分发包目录..."
+mkdir -p "$RELEASE_DIR"
+cp -a dist/* "$RELEASE_DIR/"
+echo "  已同步到 $RELEASE_DIR"
 
 echo ""
 echo "========================================"
 echo "  构建完成！"
-echo "  dist/一键发布工具/                   主程序"
-echo "  dist/一键发布工具安装程序.app         安装程序"
-echo "  dist/一键发布工具卸载程序/             卸载程序"
+echo "  开发目录 dist/"
+echo "  分发包   $RELEASE_DIR/"
 echo ""
 echo "  生成 .dmg（可选）:"
 echo "    ./build_dmg.sh"

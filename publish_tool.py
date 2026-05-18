@@ -664,29 +664,36 @@ if __name__ == "__main__": main()
             append("创建 build_all.bat...\n")
             bat = f'''@echo off
 chcp 65001 >nul
+set "RELEASE_DIR=..\\{name}_release"
+
 echo ========================================
 echo   {name} — 一键构建
 echo ========================================
 echo.
-echo [1/4] 构建主程序...
+echo [1/5] 构建主程序...
 pyinstaller build_gui.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [2/4] 构建卸载程序...
+echo [2/5] 构建卸载程序...
 pyinstaller build_uninstaller.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [3/4] 复制卸载程序到 dist...
-copy /Y "dist\\{name}卸载程序.exe" "dist\\{name}\\" 2>nul
+echo [3/5] 复制卸载程序到 dist...
+copy /Y "dist\\{name}卸载程序.exe" "dist\\{name}\\" >nul 2>nul
 echo.
-echo [4/4] 构建安装程序...
+echo [4/5] 构建安装程序...
 pyinstaller build_installer.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
+echo [5/5] 同步产物到分发包目录...
+if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%"
+xcopy "dist\\*" "%RELEASE_DIR%\\" /E /Y /Q >nul
+echo   已同步到 %RELEASE_DIR%
+echo.
 echo ========================================
 echo   构建完成！
-echo   dist/{name}安装程序.exe   安装程序
-echo   dist/{name}/               主程序目录
+echo   开发目录 dist/
+echo   分发包   %RELEASE_DIR%\\
 echo ========================================
 pause
 '''
@@ -697,15 +704,20 @@ pause
             append("创建 build_all.sh...\n")
             sh = f'''#!/bin/bash
 set -e
+RELEASE_DIR="../{name}_release"
 echo "构建 {name}..."
-echo "[1/4] 构建主程序..."
+echo "[1/5] 构建主程序..."
 pyinstaller build_gui.spec --noconfirm
-echo "[2/4] 构建卸载程序..."
+echo "[2/5] 构建卸载程序..."
 pyinstaller build_uninstaller.spec --noconfirm
-echo "[3/4] 复制卸载程序..."
+echo "[3/5] 复制卸载程序..."
 cp "dist/{name}卸载程序" "dist/{name}/" 2>/dev/null || true
-echo "[4/4] 构建安装程序..."
+echo "[4/5] 构建安装程序..."
 pyinstaller build_installer.spec --noconfirm
+echo "[5/5] 同步产物到分发包目录..."
+mkdir -p "$RELEASE_DIR"
+cp -a dist/* "$RELEASE_DIR/"
+echo "  已同步到 $RELEASE_DIR"
 echo "构建完成！"
 '''
             (d / "build_all.sh").write_text(sh, encoding="utf-8")
