@@ -1,0 +1,13 @@
+{
+  "projects": [
+    {
+      "name": "闲鱼数据采集分析工具",
+      "path": "E:/XianyuTool",
+      "version_file": "version.json"
+    }
+  ],
+  "recent_dirs": [
+    "E:/DevTool",
+    "E:/XianyuTool"
+  ]
+}
