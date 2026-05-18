@@ -21,7 +21,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
 echo [4/5] 复制卸载程序到 dist...
-copy /Y "dist\一键发布工具卸载程序\一键发布工具卸载程序.exe" "dist\一键发布工具\"
+copy /Y "dist\一键发布工具卸载程序.exe" "dist\一键发布工具\" >nul
 if %errorlevel% neq 0 (
     echo 警告: 复制卸载程序失败，安装包将不含卸载程序
 )
@@ -34,8 +34,8 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo ========================================
 echo   构建完成！
-echo   dist/一键发布工具安装程序/一键发布工具安装程序.exe  安装程序
-echo   dist/一键发布工具/                               主程序目录
-echo   dist/一键发布工具卸载程序/一键发布工具卸载程序.exe  卸载程序
+echo   dist/一键发布工具安装程序.exe       安装程序（单文件）
+echo   dist/一键发布工具/                   主程序目录
+echo   dist/一键发布工具卸载程序.exe        卸载程序（单文件）
 echo ========================================
 pause
