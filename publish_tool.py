@@ -613,10 +613,9 @@ class Uninstaller:
                 except OSError: pass
         # 自毁
         if IS_WIN:
-            bat = '@echo off\\nchcp 65001 >nul\\necho 正在卸载...\\nping -n 4 127.0.0.1 >nul\\nrd /s /q \"' + d + '\"\\ndel \"%~f0\"'
-            tmp = Path(tempfile.gettempdir()) / "_uninst.bat"
-            tmp.write_text(bat, encoding="utf-8")
-            subprocess.Popen(["cmd", "/c", str(tmp)], creationflags=subprocess.CREATE_NEW_CONSOLE|subprocess.DETACHED_PROCESS, close_fds=True, cwd=str(Path(tempfile.gettempdir())))
+            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                "Start-Sleep -Seconds 3; Remove-Item -Path '" + d + "' -Recurse -Force -ErrorAction SilentlyContinue"],
+                creationflags=subprocess.CREATE_NEW_CONSOLE|subprocess.DETACHED_PROCESS, close_fds=True)
         else:
             sh = f'#!/bin/bash\\nsleep 2\\nrm -rf "{{d}}"\\nrm -f "$0"'
             tmp = Path(tempfile.gettempdir()) / "_uninst.sh"

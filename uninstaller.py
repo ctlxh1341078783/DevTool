@@ -133,23 +133,16 @@ class UninstallerWindow:
         install_dir = str(self._install_dir)
 
         if IS_WIN:
-            # 写批处理脚本到 TEMP，用 cmd 启动后退出当前进程
-            bat_path = Path(tempfile.gettempdir()) / "_devtool_uninst.bat"
-            bat_content = f'''@echo off
-chcp 65001 >nul
-echo 正在卸载 {APP_NAME}...
-ping -n 4 127.0.0.1 >nul
-rd /s /q "{install_dir}"
-del "%~f0"
-'''
-            bat_path.write_text(bat_content, encoding="utf-8")
-
+            # PowerShell 原生支持 Unicode 路径，不会有编码问题
+            ps_cmd = (
+                f'Start-Sleep -Seconds 3; '
+                f'Remove-Item -Path "{install_dir}" -Recurse -Force -ErrorAction SilentlyContinue'
+            )
             try:
                 subprocess.Popen(
-                    ["cmd", "/c", str(bat_path)],
+                    ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
                     creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
                     close_fds=True,
-                    cwd=str(Path(tempfile.gettempdir())),
                 )
             except Exception:
                 pass
