@@ -1,14 +1,13 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "build_date": "2026-05-18",
-  "build_number": 2,
+  "build_number": 3,
   "github_repo": "ctlxh1341078783/DevTool",
   "changelog": [
-    "新增安装程序 (installer.exe)",
-    "新增卸载程序 (uninstaller.exe)",
-    "新增应用图标",
-    "新增新建项目功能（自动生成脚手架）",
-    "Git 初始化实时进度输出",
-    "修复窗口截断问题"
+    "修复安装路径问题（默认为子目录而非根目录）",
+    "修复所有窗口高度不足导致截断",
+    "修复卸载程序无实际清理动作",
+    "新建项目增加 build_all.sh / build_installer.spec / build_uninstaller.spec",
+    "安装程序改为单文件 EXE（下载即用）"
   ]
 }

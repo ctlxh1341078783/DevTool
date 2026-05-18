@@ -51,9 +51,9 @@ class PublishTool:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("一键发布工具")
-        self.root.geometry("580x660")
+        self.root.geometry("620x780")
         self.root.configure(bg=BG)
-        self.root.minsize(480, 540)
+        self.root.minsize(520, 600)
 
         self.config = load_config()
         self._project_dir = None
@@ -303,8 +303,9 @@ class PublishTool:
     def _new_project(self):
         win = tk.Toplevel(self.root, bg=SURF)
         win.title("新建项目")
-        win.geometry("520x480")
-        win.resizable(False, False)
+        win.geometry("540x620")
+        win.resizable(True, True)
+        win.minsize(480, 500)
         win.transient(self.root)
         win.grab_set()
 
@@ -343,7 +344,9 @@ class PublishTool:
         tk.Label(body, text="", bg=SURF).pack()
         tk.Label(body, text="将自动创建以下文件：\n"
                  "  version.json, build_gui.spec, installer.py,\n"
-                 "  uninstaller.py, build_all.bat, .gitignore",
+                 "  uninstaller.py, build_installer.spec,\n"
+                 "  build_uninstaller.spec, build_all.bat,\n"
+                 "  build_all.sh, .gitignore",
                  bg=SURF, fg=FG_M, font=FONT, justify=tk.LEFT).pack(anchor=tk.W, pady=(8, 4))
 
         # 日志
@@ -474,7 +477,7 @@ class Installer:
         self.root = tk.Tk()
         ver = load_version().get("version", "1.0.0")
         self.root.title(f"{name} v{{ver}} — 安装程序")
-        self.root.geometry("540x380")
+        self.root.geometry("600x440")
         self.root.resizable(False, False)
         self._installing = False
         self._build_ui()
@@ -569,7 +572,7 @@ class Uninstaller:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("{name} — 卸载")
-        self.root.geometry("460x280")
+        self.root.geometry("500x360")
         self.root.resizable(False, False)
         self._dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
         tk.Label(self.root, text="⚠ 卸载 {name}", font=("Microsoft YaHei", 14, "bold"),
@@ -628,18 +631,104 @@ if __name__ == "__main__": Uninstaller().run()
             (d / "uninstaller.py").write_text(uninst_code, encoding="utf-8")
             append("  ✓ uninstaller.py\n")
 
-            # 5. build_all.bat
+            # 5. build_all.bat (Windows 完整构建)
             append("创建 build_all.bat...\n")
             bat = f'''@echo off
 chcp 65001 >nul
-echo 构建 {name}...
+echo ========================================
+echo   {name} — 一键构建
+echo ========================================
+echo.
+echo [1/4] 构建主程序...
 pyinstaller build_gui.spec --noconfirm
 if %errorlevel% neq 0 exit /b %errorlevel%
-echo 构建完成！ 结果在 dist\\{name}\\
+echo.
+echo [2/4] 构建卸载程序...
+pyinstaller build_uninstaller.spec --noconfirm
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo.
+echo [3/4] 复制卸载程序到 dist...
+copy /Y "dist\\{name}\\卸载程序\\{name}卸载程序.exe" "dist\\{name}\\" 2>nul
+echo.
+echo [4/4] 构建安装程序...
+pyinstaller build_installer.spec --noconfirm
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo.
+echo ========================================
+echo   构建完成！
+echo   dist/{name}安装程序.exe   安装程序
+echo   dist/{name}/               主程序目录
+echo ========================================
 pause
 '''
             (d / "build_all.bat").write_text(bat, encoding="utf-8")
             append("  ✓ build_all.bat\n")
+
+            # 5b. build_all.sh (macOS)
+            append("创建 build_all.sh...\n")
+            sh = f'''#!/bin/bash
+set -e
+echo "构建 {name}..."
+echo "[1/4] 构建主程序..."
+pyinstaller build_gui.spec --noconfirm
+echo "[2/4] 构建卸载程序..."
+pyinstaller build_uninstaller.spec --noconfirm
+echo "[3/4] 复制卸载程序..."
+cp "dist/{name}\\卸载程序/{name}卸载程序" "dist/{name}/" 2>/dev/null || true
+echo "[4/4] 构建安装程序..."
+pyinstaller build_installer.spec --noconfirm
+echo "构建完成！"
+'''
+            (d / "build_all.sh").write_text(sh, encoding="utf-8")
+            append("  ✓ build_all.sh\n")
+
+            # 5c. build_installer.spec
+            append("创建 build_installer.spec...\n")
+            inst_spec = f'''# -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+PROJECT_ROOT = Path(SPECPATH)
+DIST_DIR = PROJECT_ROOT / "dist" / "{name}"
+dist_datas = []
+if DIST_DIR.exists():
+    for f in DIST_DIR.rglob("*"):
+        if f.is_file():
+            rel = f.relative_to(DIST_DIR)
+            dest = str(rel.parent) if str(rel.parent) != '.' else '.'
+            dist_datas.append((str(f), dest))
+a = Analysis(
+    [str(PROJECT_ROOT / "installer.py")],
+    pathex=[str(PROJECT_ROOT)],
+    binaries=[], datas=dist_datas,
+    hiddenimports=[], hookspath=[], hooksconfig={{}}, runtime_hooks=[],
+    excludes=["tkinter.test", "unittest", "test"], noarchive=False,
+)
+pyz = PYZ(a.pure)
+exe = EXE(pyz, a.scripts, a.binaries, a.datas, [],
+    name="{name}安装程序", debug=False, strip=False, upx=True, console=False,
+)
+'''
+            (d / "build_installer.spec").write_text(inst_spec, encoding="utf-8")
+            append("  ✓ build_installer.spec\n")
+
+            # 5d. build_uninstaller.spec
+            append("创建 build_uninstaller.spec...\n")
+            unst_spec = f'''# -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+PROJECT_ROOT = Path(SPECPATH)
+a = Analysis(
+    [str(PROJECT_ROOT / "uninstaller.py")],
+    pathex=[str(PROJECT_ROOT)],
+    binaries=[], datas=[],
+    hiddenimports=[], hookspath=[], hooksconfig={{}}, runtime_hooks=[],
+    excludes=["tkinter.test", "unittest", "test"], noarchive=False,
+)
+pyz = PYZ(a.pure)
+exe = EXE(pyz, a.scripts, a.binaries, a.datas, [],
+    name="{name}卸载程序", debug=False, strip=False, upx=True, console=False,
+)
+'''
+            (d / "build_uninstaller.spec").write_text(unst_spec, encoding="utf-8")
+            append("  ✓ build_uninstaller.spec\n")
 
             # 6. .gitignore
             append("创建 .gitignore...\n")
@@ -677,7 +766,7 @@ pause
 
         win = tk.Toplevel(self.root, bg=SURF)
         win.title("Git 仓库初始化")
-        win.geometry("600x620")
+        win.geometry("600x660")
         win.resizable(True, True)
         win.minsize(500, 500)
         win.transient(self.root)

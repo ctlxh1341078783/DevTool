@@ -20,6 +20,8 @@ IS_MAC = sys.platform == "darwin"
 APP_NAME = "一键发布工具"
 EXE_NAME = "一键发布工具.exe" if IS_WIN else "一键发布工具"
 UNINST_NAME = "一键发布工具卸载程序.exe" if IS_WIN else "一键发布工具卸载程序"
+WIN_W = 600
+WIN_H = 460
 
 def get_bundled_app_dir() -> Path:
     if IS_FROZEN:
@@ -41,14 +43,14 @@ def get_default_install_path() -> Path:
         except Exception:
             is_admin = False
         if is_admin:
-            return Path(f"C:/Program Files/{APP_NAME}")
+            return Path(f"C:/Program Files")
         else:
             local = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-            return Path(local) / "Programs" / APP_NAME
+            return Path(local) / "Programs"
     elif IS_MAC:
-        return Path(f"/Applications/{APP_NAME}")
+        return Path("/Applications")
     else:
-        return Path.home() / "Applications" / APP_NAME
+        return Path.home() / "Applications"
 
 def load_version() -> dict:
     try:
@@ -66,8 +68,9 @@ class InstallerWindow:
         self.root = tk.Tk()
         ver = load_version().get("version", "1.0.0")
         self.root.title(f"{APP_NAME} v{ver} — 安装程序")
-        self.root.geometry("540x400")
-        self.root.resizable(False, False)
+        self.root.geometry(f"{WIN_W}x{WIN_H}")
+        self.root.resizable(True, True)
+        self.root.minsize(500, 400)
         self._installing = False
         self._build_ui()
 
@@ -81,10 +84,14 @@ class InstallerWindow:
         body = tk.Frame(self.root, padx=20, pady=15)
         body.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(body, text="安装路径：", font=("微软雅黑", 11)).pack(anchor=tk.W)
+        # 安装路径 — 默认显示带子目录
+        tk.Label(body, text="安装路径（会在所选目录下创建「一键发布工具」文件夹）:",
+                 font=("微软雅黑", 10), fg="#555", wraplength=500).pack(anchor=tk.W)
+
+        default_dir = get_default_install_path() / APP_NAME
         path_frame = tk.Frame(body)
         path_frame.pack(fill=tk.X, pady=(5, 15))
-        self.path_var = tk.StringVar(value=str(get_default_install_path()))
+        self.path_var = tk.StringVar(value=str(default_dir))
         self.path_entry = ttk.Entry(path_frame, textvariable=self.path_var, font=("微软雅黑", 10))
         self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(path_frame, text="浏览...", command=self._browse, width=8).pack(side=tk.LEFT, padx=(6, 0))
@@ -104,18 +111,22 @@ class InstallerWindow:
         btn_frame.pack(fill=tk.X, pady=(15, 0))
         self.install_btn = tk.Button(btn_frame, text="开始安装", command=self._start_install,
                                      bg="#4e6ef2", fg="white", font=("微软雅黑", 11, "bold"),
-                                     relief=tk.FLAT, cursor="hand2", padx=25, pady=6)
+                                     relief=tk.FLAT, cursor="hand2", padx=25, pady=8)
         self.install_btn.pack(side=tk.LEFT)
         self.launch_var = tk.BooleanVar(value=True)
         tk.Checkbutton(btn_frame, text="安装完成后启动程序", variable=self.launch_var,
                        font=("微软雅黑", 10)).pack(side=tk.LEFT, padx=15)
         tk.Button(btn_frame, text="取消", command=self.root.destroy,
-                  font=("微软雅黑", 10), padx=15).pack(side=tk.RIGHT)
+                  font=("微软雅黑", 10), padx=15, pady=6).pack(side=tk.RIGHT)
 
     def _browse(self):
-        d = filedialog.askdirectory(title="选择安装目录", initialdir=self.path_var.get())
+        d = filedialog.askdirectory(title="选择安装目录", initialdir=str(self.path_var.get()))
         if d:
-            self.path_var.set(d)
+            # 确保选中的路径最后一级是 APP_NAME
+            p = Path(d)
+            if p.name != APP_NAME:
+                p = p / APP_NAME
+            self.path_var.set(str(p))
 
     def _start_install(self):
         if self._installing:
@@ -148,7 +159,6 @@ class InstallerWindow:
             if f.is_file():
                 files.append(f)
         total = len(files)
-
         self._report(10, f"正在安装 ({total} 个文件)...")
 
         for i, src in enumerate(files):
@@ -161,7 +171,7 @@ class InstallerWindow:
                 self._report_error(f"复制失败: {src.name}\n{e}")
                 return
             pct = 10 + int((i + 1) / total * 60)
-            if i % 50 == 0 or pct % 10 == 0:
+            if i % 100 == 0 or pct % 15 == 0:
                 self._report(pct, f"正在安装... ({i+1}/{total})")
 
         self._report(75, "正在创建快捷方式...")
@@ -170,9 +180,6 @@ class InstallerWindow:
         self._report(85, "正在注册卸载信息...")
         self._register_uninstall(target)
 
-        self._report(95, "正在复制卸载程序...")
-        self._copy_uninstaller(target)
-
         self._report(100, "安装完成！")
 
     def _create_shortcuts(self, target: Path):
@@ -180,19 +187,19 @@ class InstallerWindow:
         if not exe.exists():
             return
         if IS_WIN:
-            self._create_desktop_shortcut_win(exe)
+            self._create_desktop_shortcut_win(target, exe)
             self._create_start_menu_win(target, exe)
         elif IS_MAC:
             self._create_desktop_shortcut_mac(target, exe)
 
-    def _create_desktop_shortcut_win(self, target_exe: Path):
+    def _create_desktop_shortcut_win(self, target: Path, target_exe: Path):
         ps = f'''
 $ws = New-Object -ComObject WScript.Shell
 $desktop = [Environment]::GetFolderPath("Desktop")
 $lnk = Join-Path $desktop "{APP_NAME}.lnk"
 $sc = $ws.CreateShortcut($lnk)
 $sc.TargetPath = "{target_exe}"
-$sc.WorkingDirectory = "{target_exe.parent}"
+$sc.WorkingDirectory = "{target}"
 $sc.Description = "{APP_NAME}"
 $sc.IconLocation = "{target_exe}"
 $sc.Save()
@@ -216,7 +223,7 @@ $sc.Save()
 $ws = New-Object -ComObject WScript.Shell
 $sc = $ws.CreateShortcut("{lnk_main}")
 $sc.TargetPath = "{target_exe}"
-$sc.WorkingDirectory = "{target_exe.parent}"
+$sc.WorkingDirectory = "{target}"
 $sc.Description = "{APP_NAME}"
 $sc.IconLocation = "{target_exe}"
 $sc.Save()
@@ -273,12 +280,6 @@ open "{target_exe}"
             except (OSError, PermissionError):
                 continue
 
-    def _copy_uninstaller(self, target: Path):
-        source = get_bundled_app_dir()
-        uninst = source / UNINST_NAME
-        if uninst.exists():
-            shutil.copy2(str(uninst), str(target / UNINST_NAME))
-
     def _report(self, pct: int, msg: str):
         self.root.after(0, lambda: [
             self.progress_var.set(pct),
@@ -299,9 +300,9 @@ open "{target_exe}"
         else:
             self.install_btn.config(state=tk.NORMAL, text="安装完成 ✓")
             if self.launch_var.get():
-                target = Path(self.path_var.get()) / EXE_NAME
-                if target.exists():
-                    subprocess.Popen([str(target)], cwd=str(target.parent))
+                exe = target = Path(self.path_var.get()) / EXE_NAME
+                if exe.exists():
+                    subprocess.Popen([str(exe)], cwd=str(exe.parent))
 
     def run(self):
         self.root.mainloop()

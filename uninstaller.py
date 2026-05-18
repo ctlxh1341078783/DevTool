@@ -19,8 +19,9 @@ class UninstallerWindow:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(f"{APP_NAME} — 卸载")
-        self.root.geometry("480x300")
-        self.root.resizable(False, False)
+        self.root.geometry("500x360")
+        self.root.resizable(True, True)
+        self.root.minsize(460, 300)
         self._install_dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
         self._build_ui()
 
@@ -28,7 +29,7 @@ class UninstallerWindow:
         header = tk.Frame(self.root, bg="#e74c3c", height=50)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
-        tk.Label(header, text=f"⚠ 卸载{APP_NAME}", font=("微软雅黑", 14, "bold"),
+        tk.Label(header, text=f"⚠ 卸载 {APP_NAME}", font=("微软雅黑", 14, "bold"),
                  fg="white", bg="#e74c3c").pack(pady=10)
 
         body = tk.Frame(self.root, padx=20, pady=15)
@@ -50,31 +51,47 @@ class UninstallerWindow:
             ]
         for w in warnings:
             fg = "#e74c3c" if "不可撤销" in w else "#333"
-            tk.Label(body, text=w, font=("微软雅黑", 10), fg=fg, anchor=tk.W).pack(anchor=tk.W)
+            tk.Label(body, text=w, font=("微软雅黑", 10), fg=fg,
+                    anchor=tk.W, wraplength=440).pack(anchor=tk.W)
 
         self.confirm_var = tk.BooleanVar(value=False)
         tk.Checkbutton(body, text="我确认要彻底卸载此程序", variable=self.confirm_var,
                        font=("微软雅黑", 10, "bold")).pack(pady=(15, 5))
 
         self.status_var = tk.StringVar(value="")
-        tk.Label(body, textvariable=self.status_var, font=("微软雅黑", 10), fg="#888").pack()
+        tk.Label(body, textvariable=self.status_var, font=("微软雅黑", 10), fg="#888",
+                wraplength=440).pack()
 
         btn_frame = tk.Frame(body)
         btn_frame.pack(fill=tk.X, pady=(15, 0))
         tk.Button(btn_frame, text="确认卸载", command=self._do_uninstall,
                   bg="#e74c3c", fg="white", font=("微软雅黑", 11, "bold"),
-                  relief=tk.FLAT, cursor="hand2", padx=25, pady=6).pack(side=tk.LEFT)
+                  relief=tk.FLAT, cursor="hand2", padx=25, pady=8).pack(side=tk.LEFT)
         tk.Button(btn_frame, text="取消", command=self.root.destroy,
-                  font=("微软雅黑", 10), padx=15).pack(side=tk.RIGHT)
+                  font=("微软雅黑", 10), padx=15, pady=6).pack(side=tk.RIGHT)
 
     def _do_uninstall(self):
         if not self.confirm_var.get():
             messagebox.showwarning("提示", "请先勾选确认框")
             return
-        self.status_var.set("正在卸载...")
+
+        self.root.config(cursor="watch")
+        self.root.update()
+
+        # 1. 删桌面快捷方式
+        self.status_var.set("正在删除桌面快捷方式...")
+        self.root.update()
         self._remove_shortcuts()
+
+        # 2. 删注册表
         if IS_WIN:
+            self.status_var.set("正在清除注册表...")
+            self.root.update()
             self._remove_registry()
+
+        # 3. 自毁
+        self.status_var.set("正在清理文件并卸载...")
+        self.root.update()
         self._self_destruct()
 
     def _remove_shortcuts(self):
@@ -114,33 +131,43 @@ class UninstallerWindow:
 
     def _self_destruct(self):
         install_dir = str(self._install_dir)
-        self.status_var.set("正在清理文件...")
 
         if IS_WIN:
-            bat = f'''@echo off
-timeout /t 2 >nul
+            # 写批处理脚本到 TEMP，用 cmd 启动后退出当前进程
+            bat_path = Path(tempfile.gettempdir()) / "_devtool_uninst.bat"
+            bat_content = f'''@echo off
+chcp 65001 >nul
+echo 正在卸载 {APP_NAME}...
+ping -n 3 127.0.0.1 >nul
 rd /s /q "{install_dir}"
 del "%~f0"
 '''
-            tmpbat = Path(tempfile.gettempdir()) / "_devtool_uninst.bat"
-            tmpbat.write_text(bat, encoding="ascii")
-            subprocess.Popen(
-                ["cmd", "/c", str(tmpbat)],
-                creationflags=subprocess.CREATE_NEW_CONSOLE | 0x00000008,
-                close_fds=True,
-            )
+            bat_path.write_text(bat_content, encoding="ascii", errors="replace")
+
+            try:
+                subprocess.Popen(
+                    ["cmd", "/c", str(bat_path)],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                    close_fds=True,
+                    cwd=str(Path(tempfile.gettempdir())),
+                )
+            except Exception:
+                pass
         else:
+            sh_path = Path(tempfile.gettempdir()) / "_devtool_uninst.sh"
             script = f'''#!/bin/bash
 sleep 2
 rm -rf "{install_dir}"
 rm -f "$0"
 '''
-            tmpsh = Path(tempfile.gettempdir()) / "_devtool_uninst.sh"
-            tmpsh.write_text(script)
-            os.chmod(tmpsh, 0o755)
-            subprocess.Popen(["nohup", "bash", str(tmpsh)],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           close_fds=True)
+            sh_path.write_text(script)
+            os.chmod(sh_path, 0o755)
+            try:
+                subprocess.Popen(["nohup", "bash", str(sh_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               close_fds=True)
+            except Exception:
+                pass
 
         self.root.destroy()
         sys.exit(0)
