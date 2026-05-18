@@ -61,6 +61,8 @@ class PublishTool:
         self._version_file = None
         self._building = False
 
+        self._set_app_icon()
+        self._load_own_version()
         self._build_ui()
 
         # 自动恢复上次目录
@@ -68,6 +70,31 @@ class PublishTool:
         if recent:
             self.dir_var.set(recent[0])
             self._on_dir_changed()
+
+    def _set_app_icon(self):
+        """设置窗口图标"""
+        if not IS_WIN:
+            return
+        try:
+            ico = APPHOME / "assets" / "app_icon.ico"
+            if IS_FROZEN:
+                ico = Path(sys._MEIPASS) / "assets" / "app_icon.ico"
+            if ico.exists():
+                self.root.iconbitmap(str(ico))
+        except Exception:
+            pass
+
+    def _load_own_version(self):
+        """加载 DevTool 自己的版本信息"""
+        try:
+            vp = APPHOME / "version.json"
+            if IS_FROZEN:
+                vp = Path(sys._MEIPASS) / "version.json"
+            if vp.exists():
+                info = json.loads(vp.read_text(encoding="utf-8"))
+                self.root.title(f"一键发布工具 v{info.get('version', '1.0.0')}")
+        except Exception:
+            pass
 
     # ── UI ──────────────────────────────────────────────
 
@@ -149,6 +176,10 @@ class PublishTool:
                                          bg="#666", fg="white", font=FONT,
                                          relief=tk.FLAT, cursor="hand2", padx=20, pady=8)
         self.build_only_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        tk.Button(btn_row, text="新建项目", command=self._new_project,
+                  bg=SUCC, fg="white", font=FONT,
+                  relief=tk.FLAT, cursor="hand2", padx=12, pady=8).pack(side=tk.LEFT, padx=(8, 0))
 
         tk.Button(btn_row, text="GitHub 仓库设置", command=self._show_github_help,
                   bg="#333", fg="white", font=FONT,
@@ -266,6 +297,366 @@ class PublishTool:
         self.log_text.configure(state=tk.DISABLED)
         self.log_text.see(tk.END)
         self.root.update_idletasks()
+
+    # ── 新建项目 ────────────────────────────────────
+
+    def _new_project(self):
+        win = tk.Toplevel(self.root, bg=SURF)
+        win.title("新建项目")
+        win.geometry("520x480")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+
+        tk.Label(win, text="新建项目", bg=ACC, fg="white",
+                 font=FONT_TITLE).pack(fill=tk.X, pady=(0, 12))
+
+        body = tk.Frame(win, bg=SURF, padx=20)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        # 项目名称
+        fields = [
+            ("项目名称(中文)", "name", "我的新项目"),
+            ("主程序文件", "main", "gui_main.py"),
+            ("GitHub 仓库名", "repo", ""),
+            ("GitHub 用户名", "user", "ctlxh1341078783"),
+        ]
+        vars_dict = {}
+
+        for label, key, default in fields:
+            tk.Label(body, text=f"{label}:", bg=SURF, fg=FG, font=FONT).pack(anchor=tk.W, pady=(8, 2))
+            var = tk.StringVar(value=default)
+            vars_dict[key] = var
+            ttk.Entry(body, textvariable=var, font=FONT).pack(fill=tk.X)
+
+        # 项目目录
+        tk.Label(body, text="项目目录:", bg=SURF, fg=FG, font=FONT).pack(anchor=tk.W, pady=(8, 2))
+        dir_frame = tk.Frame(body, bg=SURF)
+        dir_frame.pack(fill=tk.X)
+        dir_var = tk.StringVar(value="E:/新项目")
+        ttk.Entry(dir_frame, textvariable=dir_var, font=FONT).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(dir_frame, text="浏览...",
+                   command=lambda: dir_var.set(filedialog.askdirectory() or dir_var.get()),
+                   width=8).pack(side=tk.LEFT, padx=(4, 0))
+
+        # 说明
+        tk.Label(body, text="", bg=SURF).pack()
+        tk.Label(body, text="将自动创建以下文件：\n"
+                 "  version.json, build_gui.spec, installer.py,\n"
+                 "  uninstaller.py, build_all.bat, .gitignore",
+                 bg=SURF, fg=FG_M, font=FONT, justify=tk.LEFT).pack(anchor=tk.W, pady=(8, 4))
+
+        # 日志
+        log_box = tk.Text(body, height=5, font=MONO, bg="#1e1e1e", fg="#d4d4d4",
+                           relief=tk.FLAT, padx=8, pady=6)
+        log_box.pack(fill=tk.BOTH, expand=True, pady=(4, 8))
+
+        def append(text):
+            log_box.insert(tk.END, text)
+            log_box.see(tk.END)
+            win.update()
+
+        # 按钮
+        btn_row = tk.Frame(win, bg=SURF)
+        btn_row.pack(fill=tk.X, padx=20, pady=(0, 12))
+
+        def do_create():
+            name = vars_dict["name"].get().strip()
+            main = vars_dict["main"].get().strip()
+            repo = vars_dict["repo"].get().strip()
+            user = vars_dict["user"].get().strip()
+            d = Path(dir_var.get().strip())
+
+            if not name:
+                messagebox.showwarning("提示", "请输入项目名称")
+                return
+
+            log_box.delete("1.0", tk.END)
+            d.mkdir(parents=True, exist_ok=True)
+
+            today = datetime.date.today().isoformat()
+            safe_name = d.name
+
+            # 1. version.json
+            append("创建 version.json...\n")
+            ver = {
+                "version": "1.0.0", "build_date": today, "build_number": 1,
+                "github_repo": f"{user}/{repo}" if repo else "",
+                "changelog": ["初始版本"]
+            }
+            (d / "version.json").write_text(
+                json.dumps(ver, ensure_ascii=False, indent=2), encoding="utf-8")
+            append("  ✓ version.json\n")
+
+            # 2. build_gui.spec
+            append("创建 build_gui.spec...\n")
+            spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
+PROJECT_ROOT = Path(SPECPATH)
+
+a = Analysis(
+    [str(PROJECT_ROOT / "{main}")],
+    pathex=[str(PROJECT_ROOT)],
+    binaries=[],
+    datas=[
+        (str(PROJECT_ROOT / "version.json"), "."),
+    ],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={{}},
+    runtime_hooks=[],
+    excludes=["tkinter.test", "unittest", "test", "matplotlib", "PIL"],
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz, a.scripts, [],
+    exclude_binaries=True,
+    name="{name}",
+    debug=False, bootloader_ignore_signals=False,
+    strip=False, upx=True, console=False,
+    disable_windowed_traceback=False,
+)
+
+coll = COLLECT(
+    exe, a.binaries, a.datas, [],
+    name="{name}",
+    debug=False, strip=False, upx=True, upx_exclude=[],
+    console=False, disable_windowed_traceback=False,
+)
+'''
+            (d / "build_gui.spec").write_text(spec_content, encoding="utf-8")
+            append("  ✓ build_gui.spec\n")
+
+            # 3. installer.py (通用模板)
+            append("创建 installer.py...\n")
+            installer_code = f'''"""
+{name} — 安装程序（Windows / macOS）
+"""
+import sys, os, json, shutil, subprocess, threading, tempfile
+from pathlib import Path
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+
+IS_FROZEN = getattr(sys, 'frozen', False)
+IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
+
+def get_bundled_app_dir():
+    if IS_FROZEN: return Path(sys._MEIPASS)
+    return Path(__file__).parent / "dist" / "{name}"
+
+def get_default_install_path():
+    if IS_WIN:
+        import ctypes
+        try:
+            if ctypes.windll.shell32.IsUserAnAdmin():
+                return Path("C:/Program Files/{name}")
+        except: pass
+        return Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) / "Programs" / "{name}"
+    elif IS_MAC:
+        return Path("/Applications/{name}")
+    return Path.home() / "Applications" / "{name}"
+
+def get_exe_name():
+    return "{name}.exe" if IS_WIN else "{name}"
+
+def load_version():
+    vp = Path(sys._MEIPASS if IS_FROZEN else __file__).parent / "version.json"
+    if vp.exists(): return json.loads(vp.read_text(encoding="utf-8"))
+    return {{"version": "1.0.0"}}
+
+class Installer:
+    def __init__(self):
+        self.root = tk.Tk()
+        ver = load_version().get("version", "1.0.0")
+        self.root.title(f"{name} v{{ver}} — 安装程序")
+        self.root.geometry("540x380")
+        self.root.resizable(False, False)
+        self._installing = False
+        self._build_ui()
+
+    def _build_ui(self):
+        tk.Label(self.root, text="{name}", font=("Microsoft YaHei", 16, "bold"),
+                 fg="white", bg="#667eea").pack(fill=tk.X, pady=12)
+        body = tk.Frame(self.root, padx=20, pady=15)
+        body.pack(fill=tk.BOTH, expand=True)
+        tk.Label(body, text="安装路径：", font=("Microsoft YaHei", 11)).pack(anchor=tk.W)
+        pf = tk.Frame(body); pf.pack(fill=tk.X, pady=(5, 15))
+        self.path_var = tk.StringVar(value=str(get_default_install_path()))
+        ttk.Entry(pf, textvariable=self.path_var, font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(pf, text="浏览...", command=lambda: (d := filedialog.askdirectory()) and self.path_var.set(d), width=8).pack(side=tk.LEFT, padx=(6, 0))
+        self.progress = ttk.Progressbar(body, maximum=100)
+        self.progress.pack(fill=tk.X, pady=(15, 5))
+        self.status_var = tk.StringVar(value="准备就绪")
+        tk.Label(body, textvariable=self.status_var, font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+        bf = tk.Frame(body); bf.pack(fill=tk.X, pady=(15, 0))
+        self.btn = tk.Button(bf, text="开始安装", command=self._start, bg="#667eea", fg="white",
+                              font=("Microsoft YaHei", 11, "bold"), relief=tk.FLAT, padx=25, pady=6)
+        self.btn.pack(side=tk.LEFT)
+        self.launch_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(bf, text="安装完成后启动程序", variable=self.launch_var, font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=15)
+        tk.Button(bf, text="取消", command=self.root.destroy, font=("Microsoft YaHei", 10), padx=15).pack(side=tk.RIGHT)
+
+    def _start(self):
+        target = Path(self.path_var.get().strip())
+        if not str(target): return messagebox.showerror("错误", "请选择安装路径")
+        try: target.mkdir(parents=True, exist_ok=True)
+        except PermissionError: return messagebox.showerror("权限不足", str(target))
+        self._installing = True; self.btn.config(state=tk.DISABLED, text="安装中...")
+        threading.Thread(target=self._install, args=(target,), daemon=True).start()
+
+    def _install(self, target):
+        src = get_bundled_app_dir()
+        if not src.exists(): return self._err(f"未找到安装源:\\n{{src}}")
+        files = [f for f in src.rglob("*") if f.is_file()]
+        total = len(files)
+        self._report(10, f"正在安装 ({{total}} 个文件)...")
+        for i, f in enumerate(files):
+            rel = f.relative_to(src); dst = target / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(f), str(dst))
+            if i % 20 == 0: self._report(10 + int((i+1)/total*80), f"安装中... ({{i+1}}/{{total}})")
+        # 桌面快捷方式
+        if IS_WIN:
+            ps = f'$ws=New-Object -ComObject WScript.Shell;$s=$ws.CreateShortcut([Environment]::GetFolderPath("Desktop")+"\\\\{name}.lnk");$s.TargetPath="{{target / get_exe_name()}}";$s.WorkingDirectory="{{target}}";$s.Save()'
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
+        elif IS_MAC:
+            sc = Path.home() / "Desktop" / f"{name}.command"
+            sc.write_text(f'#!/bin/bash\\ncd "{{target}}"\\nopen "{{target / get_exe_name()}}"')
+            os.chmod(sc, 0o755)
+        self._report(100, "安装完成！")
+
+    def _report(self, pct, msg):
+        self.root.after(0, lambda: [self.progress.configure(value=pct), self.status_var.set(msg)])
+
+    def _err(self, msg):
+        self.root.after(0, lambda: [self.status_var.set(msg), messagebox.showerror("安装失败", msg),
+                                     self.btn.config(state=tk.NORMAL, text="重试安装")])
+
+    def _check_thread(self, t):
+        if t.is_alive(): self.root.after(200, lambda: self._check_thread(t))
+        else:
+            self.btn.config(state=tk.NORMAL, text="安装完成 ✓")
+            if self.launch_var.get():
+                exe = Path(self.path_var.get()) / get_exe_name()
+                if exe.exists(): subprocess.Popen([str(exe)], cwd=str(exe.parent))
+
+    def run(self):
+        self.root.mainloop()
+
+if __name__ == "__main__":
+    Installer().run()
+'''
+            (d / "installer.py").write_text(installer_code, encoding="utf-8")
+            append("  ✓ installer.py\n")
+
+            # 4. uninstaller.py
+            append("创建 uninstaller.py...\n")
+            uninst_code = f'''""" {name} — 卸载程序 """
+import sys, os, shutil, subprocess, tempfile
+from pathlib import Path
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
+
+class Uninstaller:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("{name} — 卸载")
+        self.root.geometry("460x280")
+        self.root.resizable(False, False)
+        self._dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
+        tk.Label(self.root, text="⚠ 卸载 {name}", font=("Microsoft YaHei", 14, "bold"),
+                 fg="white", bg="#e74c3c").pack(fill=tk.X, pady=10)
+        body = tk.Frame(self.root, padx=20, pady=15); body.pack(fill=tk.BOTH, expand=True)
+        tk.Label(body, text="以下操作不可撤销：", fg="#e74c3c", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+        tk.Label(body, text=f"  删除安装目录: {{self._dir}}", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+        tk.Label(body, text="  删除桌面快捷方式", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+        if IS_WIN: tk.Label(body, text="  删除开始菜单", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+        self.confirm_var = tk.BooleanVar()
+        tk.Checkbutton(body, text="我确认要彻底卸载", variable=self.confirm_var,
+                       font=("Microsoft YaHei", 10, "bold")).pack(pady=(15, 5))
+        bf = tk.Frame(body); bf.pack(fill=tk.X, pady=(15, 0))
+        tk.Button(bf, text="确认卸载", command=self._uninstall, bg="#e74c3c", fg="white",
+                  font=("Microsoft YaHei", 11, "bold"), relief=tk.FLAT, padx=25, pady=6).pack(side=tk.LEFT)
+        tk.Button(bf, text="取消", command=self.root.destroy, font=("Microsoft YaHei", 10), padx=15).pack(side=tk.RIGHT)
+
+    def _uninstall(self):
+        if not self.confirm_var.get(): return messagebox.showwarning("提示", "请先勾选确认框")
+        d = str(self._dir)
+        # 桌面快捷方式
+        try:
+            if IS_WIN:
+                for n in ["{name}.lnk", "{name}"]:
+                    p = Path(os.environ.get("USERPROFILE", "")) / "Desktop" / n
+                    if p.exists(): os.remove(p)
+                sd = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "{name}"
+                if sd.exists(): shutil.rmtree(sd)
+            elif IS_MAC:
+                sc = Path.home() / "Desktop" / "{name}.command"
+                if sc.exists(): os.remove(sc)
+        except: pass
+        # 注册表
+        if IS_WIN:
+            import winreg
+            for h in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
+                try: winreg.DeleteKey(h, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{name}")
+                except OSError: pass
+        # 自毁
+        if IS_WIN:
+            bat = f'@echo off\\ntimeout /t 2 >nul\\nrd /s /q "{{d}}"\\ndel "%~f0"'
+            tmp = Path(tempfile.gettempdir()) / "_uninst.bat"
+            tmp.write_text(bat, encoding="ascii")
+            subprocess.Popen(["cmd", "/c", str(tmp)], creationflags=0x00000008|subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+        else:
+            sh = f'#!/bin/bash\\nsleep 2\\nrm -rf "{{d}}"\\nrm -f "$0"'
+            tmp = Path(tempfile.gettempdir()) / "_uninst.sh"
+            tmp.write_text(sh); os.chmod(tmp, 0o755)
+            subprocess.Popen(["bash", str(tmp)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.root.destroy(); sys.exit(0)
+
+    def run(self): self.root.mainloop()
+
+if __name__ == "__main__": Uninstaller().run()
+'''
+            (d / "uninstaller.py").write_text(uninst_code, encoding="utf-8")
+            append("  ✓ uninstaller.py\n")
+
+            # 5. build_all.bat
+            append("创建 build_all.bat...\n")
+            bat = f'''@echo off
+chcp 65001 >nul
+echo 构建 {name}...
+pyinstaller build_gui.spec --noconfirm
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo 构建完成！ 结果在 dist\\{name}\\
+pause
+'''
+            (d / "build_all.bat").write_text(bat, encoding="utf-8")
+            append("  ✓ build_all.bat\n")
+
+            # 6. .gitignore
+            append("创建 .gitignore...\n")
+            (d / ".gitignore").write_text("build/\ndist/\n__pycache__/\n*.pyc\n.env\n*.log\n")
+            append("  ✓ .gitignore\n")
+
+            append("\n━━━━━━━━━━━━━━━━━━━━\n")
+            append(f"✓ 项目 '{name}' 创建完成！\n")
+            append(f"  目录: {d}\n")
+            append("  下一步: 回到主界面选择此目录，然后点「GitHub 仓库设置」初始化\n")
+
+        tk.Button(btn_row, text="创建项目", command=do_create,
+                  bg=ACC, fg="white", font=FONT_BOLD,
+                  relief=tk.FLAT, cursor="hand2", padx=24, pady=6).pack(side=tk.LEFT)
+        tk.Button(btn_row, text="关闭", command=win.destroy,
+                  bg="#666", fg="white", font=FONT, padx=14, pady=6,
+                  relief=tk.FLAT, cursor="hand2").pack(side=tk.RIGHT)
 
     # ── GitHub 帮助 ──────────────────────────────────
 
@@ -426,6 +817,11 @@ class PublishTool:
             btn.config(state=tk.DISABLED, text="执行中...")
             win.update()
 
+            def append(text):
+                log_box.insert(tk.END, text)
+                log_box.see(tk.END)
+                win.update()
+
             def run_cmds():
                 cmds = [
                     ("git init", "初始化仓库"),
@@ -437,38 +833,45 @@ class PublishTool:
                 ]
                 success = True
                 for cmd, desc in cmds:
-                    log_box.insert(tk.END, f"$ {cmd}\n")
-                    log_box.see(tk.END)
-                    win.update()
+                    append(f"⏳ {desc}...\n")
+                    append(f"   $ {cmd}\n")
 
-                    r2 = subprocess.run(cmd, shell=True, cwd=p,
-                                        capture_output=True, text=True)
-                    out = r2.stdout.strip()
-                    err = r2.stderr.strip()
+                    # 用 Popen 流式读取，避免卡住感
+                    proc = subprocess.Popen(cmd, shell=True, cwd=p,
+                                            stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE,
+                                            text=True)
 
-                    if out:
-                        for line in out.split("\n")[:5]:
-                            log_box.insert(tk.END, f"  {line}\n")
-                    if err:
-                        for line in err.split("\n")[:5]:
-                            log_box.insert(tk.END, f"  {line}\n")
-                    log_box.see(tk.END)
-                    win.update()
+                    # 边读边显示
+                    for line in proc.stdout:
+                        line = line.strip()
+                        if line:
+                            append(f"     {line}\n")
+                    proc.wait()
 
-                    if r2.returncode != 0:
-                        log_box.insert(tk.END, f"✗ {desc}失败\n")
-                        log_box.insert(tk.END, f"  请检查仓库地址是否正确，或GitHub上是否已创建仓库\n")
-                        success = False
-                        break
-                    log_box.insert(tk.END, f"✓ {desc}\n\n")
-                    log_box.see(tk.END)
-                    win.update()
+                    # stderr
+                    stderr_lines = []
+                    for line in proc.stderr:
+                        line = line.strip()
+                        if line:
+                            stderr_lines.append(line)
+                            append(f"     {line}\n")
+
+                    if proc.returncode != 0:
+                        # 有些 git 命令的 warning 会走 stderr，不算失败
+                        # git push 失败才是真失败
+                        if "fatal" in "".join(stderr_lines).lower() or "error" in "".join(stderr_lines).lower():
+                            append(f"   ✗ {desc} 失败\n\n")
+                            success = False
+                            break
+                        # git add . 的 warning (CRLF) 不是错误，继续
+
+                    append(f"   ✓ {desc}\n\n")
 
                 if success:
-                    log_box.insert(tk.END, "━━━━━━━━━━━━━━━━━━━━\n")
-                    log_box.insert(tk.END, "✓ Git 初始化完成！\n")
-                    log_box.insert(tk.END, "  以后改完代码，回到本工具点「一键发布」即可\n")
-                    log_box.see(tk.END)
+                    append("━━━━━━━━━━━━━━━━━━━━\n")
+                    append("✓ Git 初始化完成！\n")
+                    append("  以后改完代码，点「一键发布」即可\n")
 
                 btn.config(state=tk.NORMAL, text="执行初始化")
 

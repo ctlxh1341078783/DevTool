@@ -1,25 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包：一键发布工具"""
+"""PyInstaller 打包配置：一键发布工具安装程序（单文件，内含整个 dist 目录）"""
 from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH)
+DIST_DIR = PROJECT_ROOT / "dist" / "一键发布工具"
+
+dist_datas = []
+if DIST_DIR.exists():
+    for f in DIST_DIR.rglob("*"):
+        if f.is_file():
+            rel = f.relative_to(DIST_DIR)
+            dest = str(rel.parent) if str(rel.parent) != '.' else '.'
+            dist_datas.append((str(f), dest))
 
 a = Analysis(
-    [str(PROJECT_ROOT / "publish_tool.py")],
+    [str(PROJECT_ROOT / "installer.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
-    datas=[
-        (str(PROJECT_ROOT / "version.json"), "."),
-        (str(PROJECT_ROOT / "projects.json"), "."),
-        (str(PROJECT_ROOT / "assets" / "app_icon.ico"), "assets"),
-    ],
+    datas=dist_datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter.test", "unittest", "test", "matplotlib", "PIL",
-              "frida", "frida_tools", "uiautomator2", "transformers",
-              "sentence_transformers", "text2vec", "tokenizers",
+    excludes=["tkinter.test", "unittest", "test", "matplotlib", "PIL", "frida", "frida_tools",
+              "uiautomator2", "transformers", "sentence_transformers", "text2vec", "tokenizers",
               "openpyxl", "huggingface_hub"],
     noarchive=False,
 )
@@ -31,7 +35,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="一键发布工具",
+    name="一键发布工具安装程序",
     icon=str(PROJECT_ROOT / "assets" / "app_icon.ico"),
     debug=False,
     bootloader_ignore_signals=False,
@@ -49,7 +53,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     [],
-    name="一键发布工具",
+    name="一键发布工具安装程序",
     debug=False,
     strip=False,
     upx=True,

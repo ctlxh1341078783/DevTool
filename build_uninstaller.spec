@@ -1,25 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包：一键发布工具"""
+"""PyInstaller 打包配置：一键发布工具卸载程序（单文件）"""
 from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH)
 
 a = Analysis(
-    [str(PROJECT_ROOT / "publish_tool.py")],
+    [str(PROJECT_ROOT / "uninstaller.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
-    datas=[
-        (str(PROJECT_ROOT / "version.json"), "."),
-        (str(PROJECT_ROOT / "projects.json"), "."),
-        (str(PROJECT_ROOT / "assets" / "app_icon.ico"), "assets"),
-    ],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter.test", "unittest", "test", "matplotlib", "PIL",
-              "frida", "frida_tools", "uiautomator2", "transformers",
-              "sentence_transformers", "text2vec", "tokenizers",
+    excludes=["tkinter.test", "unittest", "test", "matplotlib", "PIL", "frida", "frida_tools",
+              "uiautomator2", "transformers", "sentence_transformers", "text2vec", "tokenizers",
               "openpyxl", "huggingface_hub"],
     noarchive=False,
 )
@@ -31,7 +26,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="一键发布工具",
+    name="一键发布工具卸载程序",
     icon=str(PROJECT_ROOT / "assets" / "app_icon.ico"),
     debug=False,
     bootloader_ignore_signals=False,
@@ -49,7 +44,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     [],
-    name="一键发布工具",
+    name="一键发布工具卸载程序",
     debug=False,
     strip=False,
     upx=True,
